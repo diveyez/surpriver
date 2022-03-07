@@ -37,7 +37,7 @@ class DataEngine:
 
 		# Stocks list
 		self.directory_path = str(os.path.dirname(os.path.abspath(__file__)))
-		self.stocks_file_path = self.directory_path + f"/stocks/{stocks_list}"
+		self.stocks_file_path = f"{self.directory_path}/stocks/{stocks_list}"
 		self.stocks_list = []
 
 		# Load stock names in a list
@@ -51,7 +51,7 @@ class DataEngine:
 
 		# Data length
 		self.stock_data_length = []
-		
+
 		# Create an instance of the Binance Client with no api key and no secret (api key and secret not required for the functionality needed for this script)
 		self.binance_client = Client("","")
 
@@ -71,8 +71,7 @@ class DataEngine:
 	def get_most_frequent_key(self, input_list):
 		counter = collections.Counter(input_list)
 		counter_keys = list(counter.keys())
-		frequent_key = counter_keys[0]
-		return frequent_key
+		return counter_keys[0]
 
 	def get_data(self, symbol):
 		"""
@@ -80,40 +79,36 @@ class DataEngine:
 		"""
 
 		# Find period
-		if self.DATA_GRANULARITY_MINUTES == 1:
-			period = "7d"
-		else:
-			period = "30d"
-
+		period = "7d" if self.DATA_GRANULARITY_MINUTES == 1 else "30d"
 		try:
 			# get crytpo price from Binance
-			if(self.DATA_SOURCE == 'binance'):
+			if (self.DATA_SOURCE == 'binance'):
 				# Binance clients doesn't like 60m as an interval
-				if(self.DATA_GRANULARITY_MINUTES == 60):
+				if (self.DATA_GRANULARITY_MINUTES == 60):
 					interval = '1h'
 				else:
-					interval = str(self.DATA_GRANULARITY_MINUTES) + "m"
+					interval = f'{str(self.DATA_GRANULARITY_MINUTES)}m'
 				stock_prices = self.binance_client.get_klines(symbol=symbol, interval = interval)
 				# ensure that stock prices contains some data, otherwise the pandas operations below could fail
 				if len(stock_prices) == 0:
 					return [], [], True
 				# convert list to pandas dataframe
 				stock_prices = pd.DataFrame(stock_prices, columns=['Datetime', 'Open', 'High', 'Low', 'Close',
-                                             'Volume', 'close_time', 'quote_av', 'trades', 'tb_base_av', 'tb_quote_av', 'ignore'])
+				'Volume', 'close_time', 'quote_av', 'trades', 'tb_base_av', 'tb_quote_av', 'ignore'])
 				stock_prices['Datetime'] = stock_prices['Datetime'].astype(float)
 				stock_prices['Open'] = stock_prices['Open'].astype(float)
 				stock_prices['High'] = stock_prices['High'].astype(float)
 				stock_prices['Low'] = stock_prices['Low'].astype(float)
 				stock_prices['Close'] = stock_prices['Close'].astype(float)
 				stock_prices['Volume'] = stock_prices['Volume'].astype(float)
-			# get stock prices from yahoo finance
 			else:
 				stock_prices = yf.download(
-								tickers = symbol,
-								period = period,
-								interval = str(self.DATA_GRANULARITY_MINUTES) + "m",
-								auto_adjust = False,
-								progress=False)
+				    tickers=symbol,
+				    period=period,
+				    interval=f'{str(self.DATA_GRANULARITY_MINUTES)}m',
+				    auto_adjust=False,
+				    progress=False,
+				)
 			stock_prices = stock_prices.reset_index()
 			stock_prices = stock_prices[['Datetime','Open', 'High', 'Low', 'Close', 'Volume']]
 			data_length = len(stock_prices.values.tolist())
@@ -131,15 +126,14 @@ class DataEngine:
 				future_prices_list = stock_prices_list[-(self.FUTURE_FOR_TESTING + 1):]
 				historical_prices = stock_prices_list[:-self.FUTURE_FOR_TESTING]
 				historical_prices = pd.DataFrame(historical_prices)
-				historical_prices.columns = ['Datetime','Open', 'High', 'Low', 'Close', 'Volume']
 			else:
 				# No testing
 				stock_prices_list = stock_prices.values.tolist()
 				stock_prices_list = stock_prices_list[1:]
 				historical_prices = pd.DataFrame(stock_prices_list)
-				historical_prices.columns = ['Datetime','Open', 'High', 'Low', 'Close', 'Volume']
 				future_prices_list = []
 
+			historical_prices.columns = ['Datetime','Open', 'High', 'Low', 'Close', 'Volume']
 			if len(stock_prices.values.tolist()) == 0:
 				return [], [], True
 		except:
@@ -152,8 +146,7 @@ class DataEngine:
 		stock_price_data_list = stock_price_data.values.tolist()
 		close_prices = [float(item[CLOSE_PRICE_INDEX]) for item in stock_price_data_list]
 		close_prices = [item for item in close_prices if item != 0]
-		volatility = np.std(close_prices)
-		return volatility
+		return np.std(close_prices)
 
 	def collect_data_for_all_tickers(self):
 		"""
@@ -249,7 +242,7 @@ class DataEngine:
 		most_common_length = length_dictionary[0]
 
 		filtered_features, filtered_historical_price, filtered_future_prices, filtered_symbols = [], [], [], []
-		for i in range(0, len(features)):
+		for i in range(len(features)):
 			if len(features[i]) == most_common_length:
 				filtered_features.append(features[i])
 				filtered_symbols.append(symbol_names[i])

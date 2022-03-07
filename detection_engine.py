@@ -71,7 +71,8 @@ class ArgChecker:
 
 	def check_arugments(self):
 		granularity_constraints_list = [1, 5, 10, 15, 30, 60]
-		granularity_constraints_list_string = ''.join(str(value) + "," for value in granularity_constraints_list).strip(",")
+		granularity_constraints_list_string = ''.join(
+		    f'{str(value)},' for value in granularity_constraints_list).strip(",")
 		directory_path = str(os.path.dirname(os.path.abspath(__file__)))
 
 		if data_granularity_minutes not in granularity_constraints_list:
@@ -81,11 +82,11 @@ class ArgChecker:
 		if is_test == 1 and future_bars < 2:
 			print("You want to test but the future bars are less than 2. That does not give us enough data to test the model properly. Please use a value larger than 2.\nExiting now...")
 			exit()
-		
+
 		if output_format not in ["CLI", "JSON"]:
 			print("Please choose CLI or JSON for the output format field. Default is CLI.")
 			exit()
-		if not path.exists(directory_path + f'/stocks/{stock_list}'):
+		if not path.exists(f'{directory_path}/stocks/{stock_list}'):
 			print("The stocks list file must exist in the stocks directory")
 			exit()
 		if data_source not in ['binance', 'yahoo_finance']:
@@ -134,12 +135,12 @@ class Surpriver:
 	def parse_large_values(self, value):
 		if value < 1000:
 			value = str(value)
-		elif value >= 1000 and value < 1000000:
+		elif value < 1000000:
 			value = round(value / 1000, 2)
-			value = str(value) + "K"
+			value = f'{str(value)}K'
 		else:
 			value = round(value / 1000000, 1)
-			value = str(value) + "M"
+			value = f'{str(value)}M'
 
 		return value
 
@@ -150,7 +151,7 @@ class Surpriver:
 
 		# Get volume by date
 		volume_by_date_dictionary = collections.defaultdict(list)
-		for j in range(0, len(volume)):
+		for j in range(len(volume)):
 			date = dates[j].split(" ")[0]
 			volume_by_date_dictionary[date].append(volume[j])
 
@@ -167,7 +168,7 @@ class Surpriver:
 		average_vol_last_five_days = np.mean([volume_by_date_dictionary[date] for date in all_dates[1:6]])
 		average_vol_last_twenty_days = np.mean([volume_by_date_dictionary[date] for date in all_dates[1:20]])
 
-		
+
 		return latest_data_point, self.parse_large_values(today_volume), self.parse_large_values(average_vol_last_five_days), self.parse_large_values(average_vol_last_twenty_days)
 
 	def calculate_recent_volatility(self, historical_price):
@@ -182,7 +183,10 @@ class Surpriver:
 		price_at_alert = future_data[0][CLOSE_PRICE_INDEX]
 		prices_in_future = [item[CLOSE_PRICE_INDEX] for item in future_data[1:]]
 		prices_in_future = [item for item in prices_in_future if item != 0]
-		total_sum_percentage_change = abs(sum([self.calculate_percentage_change(price_at_alert, next_price) for next_price in prices_in_future]))
+		total_sum_percentage_change = abs(
+		    sum(
+		        self.calculate_percentage_change(price_at_alert, next_price)
+		        for next_price in prices_in_future))
 		future_volatility = np.std(prices_in_future)
 		return total_sum_percentage_change, future_volatility
 
@@ -197,14 +201,19 @@ class Surpriver:
 		else:
 			# Load data from dictionary
 			features, historical_price_info, future_prices, symbol_names = self.dataEngine.load_data_from_dictionary()
-		
+
 		# Find anomalous stocks using the Isolation Forest model. Read more about the model at -> https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.IsolationForest.html
 		detector = IsolationForest(n_estimators = 100, random_state = 0)
 		detector.fit(features)
 		predictions = detector.decision_function(features)
-		
+
 		# Print top predictions with some statistics
-		predictions_with_output_data = [[predictions[i], symbol_names[i], historical_price_info[i], future_prices[i]] for i in range(0, len(predictions))]
+		predictions_with_output_data = [[
+		    predictions[i],
+		    symbol_names[i],
+		    historical_price_info[i],
+		    future_prices[i],
+		] for i in range(len(predictions))]
 		predictions_with_output_data = list(sorted(predictions_with_output_data))
 
 		#Results object for storing results in JSON format
@@ -221,12 +230,13 @@ class Surpriver:
 
 			latest_date, today_volume, average_vol_last_five_days, average_vol_last_twenty_days = self.calculate_volume_changes(historical_price)
 			volatility_vol_last_five_days, volatility_vol_last_twenty_days, _ = self.calculate_recent_volatility(historical_price)
-			if average_vol_last_five_days == None or volatility_vol_last_five_days == None:
+			if (average_vol_last_five_days is None
+			    or volatility_vol_last_five_days is None):
 				continue
 
 			if self.IS_TEST == 0:
 				# Not testing so just add/print the predictions
-				
+
 				if self.OUTPUT_FORMAT == "CLI":
 					print("Last Bar Time: %s\nSymbol: %s\nAnomaly Score: %.3f\nToday Volume: %s\nAverage Volume 5d: %s\nAverage Volume 20d: %s\nVolatility 5bars: %.3f\nVolatility 20bars: %.3f\n----------------------" % 
 																	(latest_date, symbol, prediction,
@@ -275,13 +285,9 @@ class Surpriver:
 		"""
 		Function for storing results in a file
 		"""
-		today= dt.datetime.today().strftime('%Y-%m-%d')
-		
-		prefix = "results"
+		today = dt.datetime.now().strftime('%Y-%m-%d')
 
-		if self.IS_TEST != 0:
-			prefix = "results_future"
-
+		prefix = "results_future" if self.IS_TEST != 0 else "results"
 		file_name = '%s_%s.json' % (prefix, str(today))
 
 		#Print results to Result File
@@ -315,13 +321,31 @@ class Surpriver:
 
 		# Calculate correlation and stats
 		correlation = np.corrcoef(anomalous_score, future_change)[0, 1]
-		anomalous_future_changes = np.mean([future_change[x] for x in range(0, len(future_change)) if anomalous_score[x] < 0]) # Anything less than 0 is considered anomalous
-		normal_future_changes = np.mean([future_change[x] for x in range(0, len(future_change)) if anomalous_score[x] >= 0])
-		anomalous_future_volatilities = np.mean([future_volatilities[x] for x in range(0, len(future_volatilities)) if anomalous_score[x] < 0]) # Anything less than 0 is considered anomalous
-		normal_future_volatilities = np.mean([future_volatilities[x] for x in range(0, len(future_volatilities)) if anomalous_score[x] >= 0])
-		anomalous_historical_volatilities = np.mean([historical_volatilities[x] for x in range(0, len(historical_volatilities)) if anomalous_score[x] < 0]) # Anything less than 0 is considered anomalous
-		normal_historical_volatilities = np.mean([historical_volatilities[x] for x in range(0, len(historical_volatilities)) if anomalous_score[x] >= 0])
-		
+		anomalous_future_changes = np.mean([
+		    future_change[x] for x in range(len(future_change))
+		    if anomalous_score[x] < 0
+		])
+		normal_future_changes = np.mean([
+		    future_change[x] for x in range(len(future_change))
+		    if anomalous_score[x] >= 0
+		])
+		anomalous_future_volatilities = np.mean([
+		    future_volatilities[x] for x in range(len(future_volatilities))
+		    if anomalous_score[x] < 0
+		])
+		normal_future_volatilities = np.mean([
+		    future_volatilities[x] for x in range(len(future_volatilities))
+		    if anomalous_score[x] >= 0
+		])
+		anomalous_historical_volatilities = np.mean([
+		    historical_volatilities[x] for x in range(len(historical_volatilities))
+		    if anomalous_score[x] < 0
+		])
+		normal_historical_volatilities = np.mean([
+		    historical_volatilities[x] for x in range(len(historical_volatilities))
+		    if anomalous_score[x] >= 0
+		])
+
 		print("\n*************** Future Performance ***************")
 		print("Correlation between future absolute change vs anomalous score (lower is better, range = (-1, 1)): **%.2f**\nTotal absolute change in future for Anomalous Stocks: **%.3f**\nTotal absolute change in future for Normal Stocks: **%.3f**\nAverage future volatility of Anomalous Stocks: **%.3f**\nAverage future volatility of Normal Stocks: **%.3f**\nHistorical volatility for Anomalous Stocks: **%.3f**\nHistorical volatility for Normal Stocks: **%.3f**\n" % (
 								correlation,
@@ -331,8 +355,12 @@ class Surpriver:
 
 		# Plot
 		FONT_SIZE = 14
-		colors = ['#c91414' if anomalous_score[x] < 0 else '#035AA6' for x in range(0, len(anomalous_score))]
-		anomalous_vs_normal = np.array([1 if anomalous_score[x] < 0 else 0 for x in range(0, len(anomalous_score))])
+		colors = [
+		    '#c91414' if anomalous_score[x] < 0 else '#035AA6'
+		    for x in range(len(anomalous_score))
+		]
+		anomalous_vs_normal = np.array(
+		    [1 if anomalous_score[x] < 0 else 0 for x in range(len(anomalous_score))])
 		plt.scatter(np.array(anomalous_score)[anomalous_vs_normal == 1], np.array(future_change)[anomalous_vs_normal == 1], marker='v', color = '#c91414')
 		plt.scatter(np.array(anomalous_score)[anomalous_vs_normal == 0], np.array(future_change)[anomalous_vs_normal == 0], marker='P', color = '#035AA6')
 		plt.axvline(x = 0, linestyle = '--', color = '#848484')
